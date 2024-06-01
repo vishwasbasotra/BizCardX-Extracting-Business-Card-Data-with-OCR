@@ -4,7 +4,7 @@
 
 * BizCardX: Extracting Business Card Data with OCR Overview BizCardX is a Streamlit web application which extracts data from business cards using Optical Character Recognition (OCR). Users can upload an image of a business card and the application uses the easyOCR library to extract relevant information from the card. The extracted information is then displayed in a user-friendly format and can be stored in a MySQL database for future reference.
 
-![Intro GUI](https://github.com/vishwasbasotra/Phonepe-Pulse-Data-Visualization-and-Exploration/blob/main/demo.png)
+![Intro GUI](https://github.com/vishwasbasotra/BizCardX-Extracting-Business-Card-Data-with-OCR/blob/main/demo.png)
 
 ## Developer Guide 
 
