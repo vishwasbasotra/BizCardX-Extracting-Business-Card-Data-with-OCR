@@ -1,8 +1,6 @@
 import pandas as pd
-import json
 import streamlit as st
-import mysql.connector
-import numpy as np
+import mysql.connector as sql
 import cv2
 import os
 from PIL import Image
@@ -35,6 +33,31 @@ st.header("", divider='rainbow')
 #global variable
 extractedData = []
 
+#connecting with mysql database
+mydb = sql.connect(host='localhost',
+                   user='root',
+                   password='admin',
+                   database='bizcard')
+mycursor = mydb.cursor(buffered=True)
+
+#mycursor.execute("create database bizcard")
+mycursor.execute('''create table if not exists card_data
+                 (
+                 id integer primary key auto_increment,
+                 company_name text,
+                 card_holder varchar(50),
+                 designation text,
+                 mobile_number varchar(50),
+                 email text,
+                 website text,
+                 area text,
+                 city text,
+                 state text, 
+                 pin_code varchar(10),
+                 image longblob
+                 )
+
+''')
 if selected == 'Home':
     col1,col2 = st.columns(2)
     with col1:
@@ -107,7 +130,9 @@ elif selected == 'Upload & Extract':
                     "image" : []
                 }
         imageData['image'].append(img_to_binary(saved_img))
+        st.write(imageInfo)
         def imageDict(imageInfo):
+            mobile_count=0
             for ind, i in enumerate(imageInfo):
                 # To get WEBSITE_URL
                 if "www " in i.lower() or "www." in i.lower():
@@ -120,11 +145,12 @@ elif selected == 'Upload & Extract':
                     imageData["email"].append(i)
 
                 # To get MOBILE NUMBER
+                
                 elif "-" in i:
-                    imageData["mobile_number"].append(i)
-                    if len(imageData["mobile_number"]) ==2:
-                        imageData["mobile_number"] = " & ".join(imageData["mobile_number"])
-
+                    if mobile_count < 1:
+                        imageData["mobile_number"].append(i)
+                    mobile_count += 1
+     
                 # To get COMPANY NAME  
                 elif ind == len(imageData)-1:
                     imageData["company_name"].append(i)
@@ -177,9 +203,71 @@ elif selected == 'Upload & Extract':
         df = create_df(imageData)
         st.success("### Data Extracted!")
         st.write(df)
+
+        if st.button("Upload to SQL Database", type="primary"):
+            for i,row in df.iterrows():
+                #here %S means string values 
+                sql = """INSERT INTO card_data(company_name,card_holder,designation,mobile_number,email,website,area,city,state,pin_code,image)
+                         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
+                mycursor.execute(sql, tuple(row))
+                # the connection is not auto committed by default, so we must commit to save our changes
+                mydb.commit()
+            st.success('Data uploaded to MySQL Database successfully')
+            st.balloons()
 elif selected == 'Modify':
-    if extractedData is None:
-         st.subheader("Go back to 'Upload & Extract' page and upload an image!")
-    else:
-         st.write(extractedData)
-         print(extractedData)
+    col1,col2,col3 = st.columns([3,3,2])
+    col2.markdown("## Alter or Delete the data here")
+    column1,column2 = st.columns(2,gap="large")
+    try:
+        with column1:
+            mycursor.execute("SELECT card_holder FROM card_data")
+            result = mycursor.fetchall()
+            business_cards = {}
+            for row in result:
+                business_cards[row[0]] = row[0]
+            selected_card = st.selectbox("Select a card holder name to update", list(business_cards.keys()))
+            st.markdown("#### Update or modify any data below")
+            mycursor.execute("select company_name,card_holder,designation,mobile_number,email,website,area,city,state,pin_code from card_data WHERE card_holder=%s",
+                            (selected_card,))
+            result = mycursor.fetchone()
+
+            # DISPLAYING ALL THE INFORMATIONS
+            company_name = st.text_input("Company_Name", result[0])
+            card_holder = st.text_input("Card_Holder", result[1])
+            designation = st.text_input("Designation", result[2])
+            mobile_number = st.text_input("Mobile_Number", result[3])
+            email = st.text_input("Email", result[4])
+            website = st.text_input("Website", result[5])
+            area = st.text_input("Area", result[6])
+            city = st.text_input("City", result[7])
+            state = st.text_input("State", result[8])
+            pin_code = st.text_input("Pin_Code", result[9])
+
+            if st.button("Commit changes to DB"):
+                # Update the information for the selected business card in the database
+                mycursor.execute("""UPDATE card_data SET company_name=%s,card_holder=%s,designation=%s,mobile_number=%s,email=%s,website=%s,area=%s,city=%s,state=%s,pin_code=%s
+                                    WHERE card_holder=%s""", (company_name,card_holder,designation,mobile_number,email,website,area,city,state,pin_code,selected_card))
+                mydb.commit()
+                st.success("Information updated in database successfully.")
+
+        with column2:
+            mycursor.execute("SELECT card_holder FROM card_data")
+            result = mycursor.fetchall()
+            business_cards = {}
+            for row in result:
+                business_cards[row[0]] = row[0]
+            selected_card = st.selectbox("Select a card holder name to Delete", list(business_cards.keys()))
+            st.write(f"### You have selected :green[**{selected_card}'s**] card to delete")
+            st.write("#### Proceed to delete this card?")
+
+            if st.button("Yes Delete Business Card"):
+                mycursor.execute(f"DELETE FROM card_data WHERE card_holder='{selected_card}'")
+                mydb.commit()
+                st.success("Business card information deleted from database.")
+    except:
+        st.warning("There is no data available in the database")
+    
+    if st.button("View updated data"):
+        mycursor.execute("select company_name,card_holder,designation,mobile_number,email,website,area,city,state,pin_code from card_data")
+        updated_df = pd.DataFrame(mycursor.fetchall(),columns=["Company_Name","Card_Holder","Designation","Mobile_Number","Email","Website","Area","City","State","Pin_Code"])
+        st.write(updated_df)
