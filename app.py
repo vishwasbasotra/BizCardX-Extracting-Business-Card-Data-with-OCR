@@ -11,6 +11,8 @@ from streamlit_option_menu import option_menu
 import plotly.express as px
 from io import StringIO
 import easyocr
+import sqlalchemy as sa
+import re
 
 #Configuring streamlit header
 im = Image.open("biz.jpg")
@@ -29,6 +31,9 @@ selected = option_menu(None, ["Home","Upload & Extract","Modify"],
                                "container" : {"max-width": "6000px"},
                                "nav-link-selected": {"background-color": "#6495ED"}})
 st.header("", divider='rainbow')
+
+#global variable
+extractedData = []
 
 if selected == 'Home':
     col1,col2 = st.columns(2)
@@ -59,8 +64,8 @@ elif selected == 'Upload & Extract':
             plt.figure(figsize=(10,10))
             plt.imshow(image)
             #plt.show()
-
     if uploaded_file is not None:
+        imageInfo = []
         col1,col2 = st.columns(2)
         with col1:
             # Displaying the image:
@@ -75,5 +80,106 @@ elif selected == 'Upload & Extract':
                 st.markdown("### Image Processed and Data Extracted")
                 st.set_option('deprecation.showPyplotGlobalUse', False)
                 st.pyplot(image_preview(image,res), use_container_width=True) 
-else:
-    st.write('Hellow')
+                for i in res:
+                    count = 0
+                    for j in i:
+                        if count == 1:
+                            imageInfo.append(j)
+                        count += 1
+                        if count > 1:
+                            break
+
+        def img_to_binary(file):
+            # Convert image data to binary format
+            with open(file, 'rb') as file:
+                binaryData = file.read()
+            return binaryData
+        imageData = {"company_name" : [],
+                    "card_holder" : [],
+                    "designation" : [],
+                    "mobile_number" :[],
+                    "email" : [],
+                    "website" : [],
+                    "area" : [],
+                    "city" : [],
+                    "state" : [],
+                    "pin_code" : [],
+                    "image" : []
+                }
+        imageData['image'].append(img_to_binary(saved_img))
+        def imageDict(imageInfo):
+            for ind, i in enumerate(imageInfo):
+                # To get WEBSITE_URL
+                if "www " in i.lower() or "www." in i.lower():
+                    imageData["website"].append(i)
+                elif "WWW" in i:
+                    imageData["website"] = imageInfo[4] +"." + imageInfo[5]
+
+                # To get EMAIL ID
+                elif "@" in i:
+                    imageData["email"].append(i)
+
+                # To get MOBILE NUMBER
+                elif "-" in i:
+                    imageData["mobile_number"].append(i)
+                    if len(imageData["mobile_number"]) ==2:
+                        imageData["mobile_number"] = " & ".join(imageData["mobile_number"])
+
+                # To get COMPANY NAME  
+                elif ind == len(imageData)-1:
+                    imageData["company_name"].append(i)
+
+                # To get CARD HOLDER NAME
+                elif ind == 0:
+                    imageData["card_holder"].append(i)
+
+                # To get DESIGNATION
+                elif ind == 1:
+                    imageData["designation"].append(i)
+
+                # To get AREA
+                if re.findall('^[0-9].+, [a-zA-Z]+',i):
+                    imageData["area"].append(i.split(',')[0])
+                elif re.findall('[0-9] [a-zA-Z]+',i):
+                    imageData["area"].append(i)
+
+                # To get CITY NAME
+                match1 = re.findall('.+St , ([a-zA-Z]+).+', i)
+                match2 = re.findall('.+St,, ([a-zA-Z]+).+', i)
+                match3 = re.findall('^[E].*',i)
+                if match1:
+                    imageData["city"].append(match1[0])
+                elif match2:
+                    imageData["city"].append(match2[0])
+                elif match3:
+                    imageData["city"].append(match3[0])
+
+                # To get STATE
+                state_match = re.findall('[a-zA-Z]{9} +[0-9]',i)
+                if state_match:
+                    imageData["state"].append(i[:9])
+                elif re.findall('^[0-9].+, ([a-zA-Z]+);',i):
+                    imageData["state"].append(i.split()[-1])
+                if len(imageData["state"])== 2:
+                    imageData["state"].pop(0)
+
+                # To get PINCODE        
+                if len(i)>=6 and i.isdigit():
+                    imageData["pin_code"].append(i)
+                elif re.findall('[a-zA-Z]{9} +[0-9]',i):
+                    imageData["pin_code"].append(i[10:])
+        imageDict(imageInfo)
+        
+        def create_df(imageData):
+            df = pd.DataFrame.from_dict(imageData, orient='index')
+            df = df.transpose()
+            return df
+        df = create_df(imageData)
+        st.success("### Data Extracted!")
+        st.write(df)
+elif selected == 'Modify':
+    if extractedData is None:
+         st.subheader("Go back to 'Upload & Extract' page and upload an image!")
+    else:
+         st.write(extractedData)
+         print(extractedData)
