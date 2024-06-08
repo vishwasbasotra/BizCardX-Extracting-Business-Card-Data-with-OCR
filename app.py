@@ -6,10 +6,7 @@ import os
 from PIL import Image
 import matplotlib.pyplot as plt
 from streamlit_option_menu import option_menu
-import plotly.express as px
-from io import StringIO
 import easyocr
-import sqlalchemy as sa
 import re
 
 #Configuring streamlit header
